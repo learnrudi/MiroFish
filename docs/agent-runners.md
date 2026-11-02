@@ -15,17 +15,19 @@ automatically create jobs, reuse logins, or turn a subscription into an API serv
   request hash, strict single-action validation, sync/async CAMEL response adapter.
 - `backend/app/agent_runners/exchange.py`: bounded UTF-8 JSON files, duplicate-key
   rejection, no final symlinks, and rejection of a changed request.
-- `backend/app/agent_runners/oasis_smoke.py`: one synthetic character, one round,
-  one allowed action, concurrency one, fresh SQLite state, bounded execution.
-- `backend/scripts/run_oasis_runner.py`: prepare/apply commands.
+- `backend/app/agent_runners/oasis_smoke.py`: one or three synthetic characters,
+  one round, one allowed action, concurrency one, fresh SQLite state, bounded execution.
+- `backend/app/agent_runners/oasis_group.py`: three file exchanges with validation
+  of every response and regenerated context before application.
+- `backend/scripts/run_oasis_runner.py`: single-agent and group prepare/apply commands.
 - `backend/tests/test_oasis_runner.py`: real OASIS tests with deterministic runner
   responses, plus boundary and failure tests. These tests do not invoke Codex.
 
 The fixture uses Alice's reaction to a note-taking subscription rising from $20
 to $30 against her $25 budget. The event is supplied in her context; the simulated
 feed starts empty. Reddit's local recommendation implementation avoids a Twitter
-embedding-model download. There is no Zep ingestion, model API key, second agent,
-or live social-media account involved.
+embedding-model download. There is no Zep ingestion, model API key, or live
+social-media account involved.
 
 ## Prepare the actual OASIS request
 
@@ -94,6 +96,65 @@ recorded error and the database so a missing, rejected, or failed runner respons
 cannot silently count as a successful simulation. Failed runs retain evidence;
 prepare a new reviewed exchange instead of blindly retrying into an existing DB.
 
+## Three agents sharing a world
+
+The group fixture keeps Alice and adds Bob (daily work use, $50 budget) and Casey
+(team administrator concerned about predictable costs and migration effort).
+All receive the same $20-to-$30 announcement. Each has a separate model instance,
+persona context, request digest, and native response. They share one OASIS world.
+This is one round from an empty feed, not a conversation or a test of reactions
+to each other's posts. OASIS action concurrency remains one.
+
+```sh
+uv run --frozen python scripts/run_oasis_runner.py prepare-group \
+  --directory /tmp/mirofish-group \
+  --identity codex-hoff --model gpt-6.1-sol --effort low
+```
+
+This captures `alice/request.json`, `bob/request.json`, and `casey/request.json`
+and a `prepare.db` with zero posts. Review three separate native tasks, one per
+packet, using the workflow above. Separate fresh sessions keep the characters'
+prompt contexts apart; they do not create a filesystem security boundary in
+trusted execution mode. No native tasks are created or run by these commands.
+
+After verifying all three native receipts and output hashes, save the responses
+as `alice.json`, `bob.json`, and `casey.json` in a separate response directory:
+
+```sh
+uv run --frozen python scripts/run_oasis_runner.py apply-group \
+  --directory /tmp/mirofish-group --responses /path/to/verified-responses
+```
+
+The command validates and snapshots all response files, then regenerates and
+compares all three actual OASIS requests in a fresh `verify.db` without posting.
+Only after that does it create `apply.db` and execute the three decisions.
+Success requires exactly one post and one `create_post` trace for each expected
+user; `result.json` includes attribution and all three request digests.
+Missing, swapped, malformed, or stale responses fail before application. A changed
+later request also fails before any posts. A runtime failure during application
+is reported as a failure and can leave partial SQLite evidence; this is not a
+database-wide transaction. Existing databases are never reused or overwritten.
+
+The group tests use the real OASIS engine and deterministic response fixtures.
+They establish context separation, shared database attribution, request/response
+validation, CLI round trips, preserved failure evidence, and refusal to repeat
+application. They do not establish live Codex completion or model quality.
+
+The three-agent extension passed all 151 backend tests (eight new group cases).
+Independent review found that escaped lone-surrogate text could reach SQLite
+after other agents had posted. Strict UTF-8 content validation now rejects it
+during preflight; the reviewer confirmed the regression and approved this bounded
+implementation. Existing upstream igraph/SQLite deprecation warnings remain.
+
+### Execution hosts
+
+The accepted single-agent source was cloned to Admin through Git at merge
+`f34b3cb01d039aee0d480a0dc50586d39f853cea`. On 2026-11-02, installing the pinned
+backend on macOS Intel stopped because `torch==2.9.1` has no compatible wheel.
+Backend validation therefore runs on the Apple Silicon workstation. Native
+Codex tasks can still run on Admin, with verified response files brought back
+for local OASIS application. No dependencies were changed to bypass this limit.
+
 ## Verification and limits
 
 ```sh
@@ -123,7 +184,7 @@ The reviewer confirmed the correction; the full backend suite passed 143 tests.
 
 This is not yet the main web application's inference backend. Persona/config
 generation, reports, interviews, multiple rounds, other tools, streaming, other
-providers, automatic job admission and concurrent agents are outside this slice.
+providers, automatic job admission and parallel action execution are outside this slice.
 The byte-based context counter is a conservative fixture budget, not measured
 token usage or a production tokenizer. The full app retains its original model
 API and Zep requirements. Source stays in Git; account profiles, keys, databases,

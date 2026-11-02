@@ -39,6 +39,10 @@ def validate_decision(response, digest):
     content = args["content"]
     if not isinstance(content, str) or not content.strip() or len(content) > 280:
         raise ValueError("Post content must contain 1-280 characters")
+    try:
+        content.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise ValueError("Post content must be valid UTF-8 text") from error
     return call
 
 
