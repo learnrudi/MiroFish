@@ -126,3 +126,22 @@ def test_prepare_cli_has_one_machine_readable_status(tmp_path):
     status = json.loads(run.stdout)
     assert status["status"] == "awaiting_review"
     assert Path(status["request"]).is_file()
+
+
+@pytest.mark.asyncio
+async def test_changed_request_json_type_is_rejected_before_oasis_posts(tmp_path):
+    settings = dict(identity="test-codex", model="gpt-6.1-sol", effort="low")
+    with pytest.raises(ReviewRequired):
+        await run_one_agent(ReviewedActionModel(FileExchange(tmp_path), **settings), tmp_path / "prepare.db")
+    path = tmp_path / "request.json"
+    packet = json.loads(path.read_text())
+    packet["schema_version"] = True  # Python equality conflates True and 1.
+    path.write_text(json.dumps(packet))
+    response = tmp_path / "response.json"
+    response.write_text(json.dumps({"schema_version": 1, "request_sha256": packet["request_sha256"],
+        "tool_call": {"name": "create_post", "arguments": {"content": "Must never be posted."}}}))
+    model = ReviewedActionModel(FileExchange(tmp_path, response), **settings)
+    with pytest.raises(ValueError, match="Request changed"):
+        await run_one_agent(model, tmp_path / "apply.db")
+    with sqlite3.connect(tmp_path / "apply.db") as conn:
+        assert conn.execute("SELECT COUNT(*) FROM post").fetchone() == (0,)

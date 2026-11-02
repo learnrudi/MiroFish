@@ -13,6 +13,8 @@ from camel.models import BaseModelBackend
 from camel.utils import BaseTokenCounter
 from openai.types.chat import ChatCompletion
 
+from .exchange import canonical_json
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +105,7 @@ class ReviewedActionModel(BaseModelBackend):
             "messages": messages,
             "tools": tools,
         }
-        encoded = json.dumps(body, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
+        encoded = canonical_json(body).encode()
         if len(encoded) > 65536:
             raise ValueError("Request exceeds the experiment's 64 KiB budget")
         digest = hashlib.sha256(encoded).hexdigest()

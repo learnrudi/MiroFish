@@ -115,6 +115,12 @@ one `create_post` trace. The native job took 28.5 seconds including runner/file
 overhead; this single observation is not a throughput benchmark. The backend
 suite passed all 142 tests, including the 13 new runner/OASIS tests.
 
+An independent pre-merge technical review caught a request-comparison edge case:
+Python treats JSON booleans and numbers as equal in some comparisons. Matching
+now uses canonical JSON serialization, preserving types. A real-OASIS regression
+first reproduced an unwanted post, then passed with rejection and zero posts.
+The reviewer confirmed the correction; the full backend suite passed 143 tests.
+
 This is not yet the main web application's inference backend. Persona/config
 generation, reports, interviews, multiple rounds, other tools, streaming, other
 providers, automatic job admission and concurrent agents are outside this slice.

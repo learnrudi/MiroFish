@@ -10,6 +10,11 @@ class ReviewRequired(FileNotFoundError):
     """The request was captured, but no reviewed response was supplied."""
 
 
+def canonical_json(value):
+    """Preserve JSON types when comparing or hashing a reviewed packet."""
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+
+
 def read_json(path, limit=16384):
     """Read bounded regular JSON files; never follow the final symlink."""
     path = Path(path)
@@ -45,7 +50,7 @@ class FileExchange:
     def __call__(self, request):
         path = self.directory / "request.json"
         if path.exists() or path.is_symlink():
-            if read_json(path, limit=131072) != request:
+            if canonical_json(read_json(path, limit=131072)) != canonical_json(request):
                 raise ValueError("Request changed; prepare a separate reviewed exchange")
         else:
             with path.open("x") as stream:
