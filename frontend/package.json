@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "test:runner": "node --test tests/recordedRun.test.js",
+    "test:runner": "node --test tests/recordedRun.test.js tests/nativeRuns.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

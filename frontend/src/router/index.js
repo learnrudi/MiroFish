@@ -8,6 +8,11 @@ import InteractionView from '../views/InteractionView.vue'
 
 const routes = [
   {
+    path: '/native-run',
+    name: 'NativeRun',
+    component: () => import('../views/NativeRunView.vue')
+  },
+  {
     path: '/runner-results',
     name: 'RunnerResults',
     component: () => import('../views/RunnerResultsView.vue')
