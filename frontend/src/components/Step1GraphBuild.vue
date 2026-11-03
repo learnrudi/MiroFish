@@ -2,14 +2,14 @@
   <div class="workbench-panel">
     <div class="scroll-container">
       <!-- Step 01: Ontology -->
-      <div class="step-card" :class="{ 'active': currentPhase === 0, 'completed': currentPhase > 0 }">
+      <div class="step-card" :class="{ 'active': currentPhase === 0 && !projectData?.ontology, 'completed': currentPhase > 0 || projectData?.ontology }">
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">01</span>
             <span class="step-title">{{ $t('step1.ontologyGeneration') }}</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase > 0" class="badge success">{{ $t('step1.ontologyCompleted') }}</span>
+            <span v-if="currentPhase > 0 || projectData?.ontology" class="badge success">{{ $t('step1.ontologyCompleted') }}</span>
             <span v-else-if="currentPhase === 0" class="badge processing">{{ $t('step1.ontologyGenerating') }}</span>
             <span v-else class="badge pending">{{ $t('step1.ontologyPending') }}</span>
           </div>
@@ -23,7 +23,7 @@
 
           <!-- Loading / Progress -->
           <div v-if="currentPhase === 0 && ontologyProgress" class="progress-section">
-            <div class="spinner-sm"></div>
+            <div v-if="!projectData?.ontology" class="spinner-sm"></div>
             <span>{{ ontologyProgress.message || $t('step1.analyzingDocs') }}</span>
           </div>
 

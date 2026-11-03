@@ -8,8 +8,10 @@ and needs its own approval. The community feed updates after receipt validation
 and successful OASIS application. `/runner-results` remains a read-only importer.
 
 This is a **local operator experiment**, not the full application run workflow.
-Ontology, persona/config generation, reports and interviews remain separate
-API-backed paths. Zep remains a separate graph service. The fixed three personas,
+The normal application now has a separate opt-in [native setup mode](native-setup.md)
+for ontology and persona/config generation. Reports, interviews and the general
+simulation runner remain API-backed outside that mode. Zep remains a separate
+graph service. The fixed three personas,
 two rounds, create_post-only action and selected identity/model are intentional.
 
 ## Start the local services

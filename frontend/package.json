@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:native-setup": "VITE_NATIVE_SETUP=1 vite --host 127.0.0.1",
     "build": "vite build",
-    "test:runner": "node --test tests/recordedRun.test.js tests/nativeRuns.test.js",
+    "test:runner": "node --test tests/recordedRun.test.js tests/nativeRuns.test.js tests/nativeSetup.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

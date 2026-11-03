@@ -14,13 +14,15 @@ export function setPendingUpload(files, requirement) {
   state.files = files
   state.simulationRequirement = requirement
   state.isPending = true
+  state.requestId = crypto.randomUUID().replaceAll('-', '')
 }
 
 export function getPendingUpload() {
   return {
     files: state.files,
     simulationRequirement: state.simulationRequirement,
-    isPending: state.isPending
+    isPending: state.isPending,
+    requestId: state.requestId
   }
 }
 

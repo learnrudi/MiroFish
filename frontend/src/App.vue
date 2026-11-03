@@ -1,9 +1,11 @@
 <template>
   <router-view />
+  <NativeSetupPanel v-if="nativeSetupEnabled" />
 </template>
 
 <script setup>
-// 使用 Vue Router 来管理页面
+import NativeSetupPanel from './components/NativeSetupPanel.vue'
+import { nativeSetupEnabled } from './api/index.js'
 </script>
 
 <style>

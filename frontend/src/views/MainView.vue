@@ -86,6 +86,8 @@ import Step2EnvSetup from '../components/Step2EnvSetup.vue'
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import LanguageSwitcher from '../components/LanguageSwitcher.vue'
+import { nativeSetupEnabled } from '../api/index.js'
+import { setupClient } from '../api/nativeSetup.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -138,6 +140,7 @@ const statusText = computed(() => {
   if (error.value) return 'Error'
   if (currentPhase.value >= 2) return 'Ready'
   if (currentPhase.value === 1) return 'Building Graph'
+  if (nativeSetupEnabled && projectData.value?.ontology) return 'Ontology ready · graph setup required'
   if (currentPhase.value === 0) return 'Generating Ontology'
   return 'Initializing'
 })
@@ -208,6 +211,7 @@ const handleNewProject = async () => {
     const formData = new FormData()
     pending.files.forEach(f => formData.append('files', f))
     formData.append('simulation_requirement', pending.simulationRequirement)
+    if (nativeSetupEnabled) formData.append('request_id', pending.requestId)
     
     const res = await generateOntology(formData)
     if (res.success) {
@@ -216,6 +220,11 @@ const handleNewProject = async () => {
       projectData.value = res.data
       
       router.replace({ name: 'Process', params: { projectId: res.data.project_id } })
+      if (res.data.setup) {
+        ontologyProgress.value = { message: 'Review the codex-hoff generation in Native setup.' }
+        await resumeNativeOntology()
+        return
+      }
       ontologyProgress.value = null
       addLog(`Ontology generated successfully for project ${res.data.project_id}`)
       await startBuildGraph()
@@ -241,8 +250,11 @@ const loadProject = async () => {
       updatePhaseByStatus(res.data.status)
       addLog(`Project loaded. Status: ${res.data.status}`)
       
-      if (res.data.status === 'ontology_generated' && !res.data.graph_id) {
-        await startBuildGraph()
+      if (res.data.status === 'created' && nativeSetupEnabled) {
+        await resumeNativeOntology()
+      } else if (res.data.status === 'ontology_generated' && !res.data.graph_id) {
+        if (!nativeSetupEnabled || (await setupClient.session()).zep_configured) await startBuildGraph()
+        else ontologyProgress.value = { message: 'Ontology is saved. A new Zep Cloud project is needed to build the graph.' }
       } else if (res.data.status === 'graph_building' && res.data.graph_build_task_id) {
         currentPhase.value = 1
         startPollingTask(res.data.graph_build_task_id)
@@ -271,6 +283,28 @@ const updatePhaseByStatus = (status) => {
     case 'failed': error.value = 'Project failed'; break;
   }
 }
+
+let setupTimer = null
+let setupStopped = false
+const resumeNativeOntology = async () => {
+  if (setupStopped) return
+  clearTimeout(setupTimer)
+  try {
+    const session = await setupClient.session()
+    const setup = session.workflows.find(item => item.resource === currentProjectId.value)
+    if (!setup) throw new Error('No saved native setup was found for this project.')
+    if (setup.status === 'completed') {
+      ontologyProgress.value = null
+      await loadProject()
+      return
+    }
+    ontologyProgress.value = { message: setup.error?.message || setup.events.at(-1)?.message || setup.status }
+  } catch (err) {
+    ontologyProgress.value = { message: `Setup connection interrupted: ${err.message}` }
+  }
+  if (!setupStopped) setupTimer = setTimeout(resumeNativeOntology, 3000)
+}
+onUnmounted(() => { setupStopped = true; clearTimeout(setupTimer) })
 
 const startBuildGraph = async () => {
   try {
