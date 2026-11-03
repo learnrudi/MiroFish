@@ -13,9 +13,8 @@ def snapshot(run):
                    for name, agent in run['rounds'][-1]['agents'].items()]}
 
 
-def create_native_app(coordinator, options):
-    app = Flask(__name__)
-    app.config['MAX_CONTENT_LENGTH'] = 4096
+def install_operator_boundary(app, options):
+    """Shared loopback and per-process operator-session boundary."""
     token = secrets.token_urlsafe(32)
     hosts = {f"127.0.0.1:{options['port']}", f"localhost:{options['port']}"}
     origins = set(options['origins'])
@@ -36,6 +35,13 @@ def create_native_app(coordinator, options):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         return response
+    return token
+
+
+def create_native_app(coordinator, options):
+    app = Flask(__name__)
+    app.config['MAX_CONTENT_LENGTH'] = 4096
+    token = install_operator_boundary(app, options)
     @app.get('/api/native-runs/session')
     def session():
         return {'runner': coordinator.compute.identity, 'token': token, 'run': snapshot(coordinator.active())}

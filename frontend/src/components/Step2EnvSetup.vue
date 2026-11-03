@@ -518,10 +518,10 @@
             </button>
             <button 
               class="action-btn primary"
-              :disabled="phase < 4"
+              :disabled="phase < 4 || nativeSetupEnabled"
               @click="handleStartSimulation"
             >
-              {{ $t('step2.startDualWorldSim') }} ➝
+              {{ nativeSetupEnabled ? 'General simulation runner: next integration' : $t('step2.startDualWorldSim') }} ➝
             </button>
           </div>
         </div>
@@ -633,6 +633,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { nativeSetupEnabled } from '../api/index.js'
 import { useI18n } from 'vue-i18n'
 import {
   prepareSimulation,
@@ -750,6 +751,7 @@ const handlePrepareFailure = (message) => {
 
 // 处理开始模拟按钮点击
 const handleStartSimulation = () => {
+  if (nativeSetupEnabled) return
   // 构建传递给父组件的参数
   const params = {}
   

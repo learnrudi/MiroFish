@@ -78,14 +78,24 @@ class NativeCompute:
     def inspect(self, record):
         result = self.call("inspect", record=record)
         if result["status"] == "succeeded":
-            from .oasis_model import validate_decision
-            validate_decision(result["response"], record["request_sha256"])
+            if record.get('response_kind') == 'setup_json':
+                response = result['response']
+                if (not isinstance(response, dict) or set(response) != {'schema_version', 'request_sha256', 'result'}
+                        or type(response['schema_version']) is not int or response['schema_version'] != 1
+                        or response['request_sha256'] != record['request_sha256'] or not isinstance(response['result'], dict)):
+                    raise ValueError('Invalid setup response envelope')
+            else:
+                from .oasis_model import validate_decision
+                validate_decision(result["response"], record["request_sha256"])
         return result
 
     def admit(self, record):
         self.call("admit", record=record)
 
     def build_record(self, task_id, name, packet, source):
+        if task_id.startswith('mfs-'):
+            from .setup_compute import build_setup_record
+            return build_setup_record(self, task_id, name, packet, source)
         if not re.fullmatch(r"mf-[a-f0-9]{32}-r[12]-(alice|bob|casey)-a[12]", task_id) or name not in ("alice", "bob", "casey"):
             raise ValueError("Invalid bounded task identifier")
         if packet["runner"] != {"provider": "codex", **self.identity}:
@@ -128,12 +138,21 @@ Exact OASIS packet:
 {request_text.rstrip()}
 ```
 '''
+        return self.control_record(task_id, name, packet, source, instructions,
+                                   f"MiroFish UI: {name.title()} via codex-hoff")
+
+    def control_record(self, task_id, name, packet, source, instructions, title):
+        """One owner for native controls shared by decisions and setup JSON."""
+        project = Path(self.config["remote_outputs_root"]) / task_id
+        control = Path(self.config["target"]["worker"]["root"]) / "tasks" / task_id
+        request_text = canonical_json(packet) + "\n"
+        request_sha = sha(request_text.encode())
         roots = [str(project), *self.config["shared_roots"]]
         profile = {"schema_version": 1, "provider": "codex", "model": self.identity["model"],
             "reasoning_effort": "low", "account": self.config["target"]["account"], "workspace_mode": "registered-shared",
             "access_mode": "trusted", "working_directory": str(project), "read_roots": roots, "write_roots": roots,
             "network": "enabled", "timeout_ms": 600000}
-        task = {"schema_version": 1, "id": task_id, "title": f"MiroFish UI: {name.title()} via codex-hoff",
+        task = {"schema_version": 1, "id": task_id, "title": title,
             "instructions": {"path": str(control / "instructions.md"), "sha256": sha(instructions.encode())},
             "execution_profile": {"path": str(control / "profile.json"), "sha256": sha(encode(profile))},
             "working_directory": str(project), "outputs": {"deliverables": [str(project / "results")], "runtime": str(control / "runtime")},

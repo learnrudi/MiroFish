@@ -246,26 +246,35 @@ class OasisProfileGenerator:
         base_url: Optional[str] = None,
         model_name: Optional[str] = None,
         zep_api_key: Optional[str] = None,
-        graph_id: Optional[str] = None
+        graph_id: Optional[str] = None,
+        llm_client=None,
+        entity_contexts=None,
     ):
+        self.llm_client = llm_client
+        self.entity_contexts = entity_contexts
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model_name = model_name or Config.LLM_MODEL_NAME
         
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY 未配置")
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        self.client = None
+        if llm_client is not None:
+            self.model_name = llm_client.model
+            self.base_url = None
+        else:
+            if not self.api_key:
+                raise ValueError("LLM_API_KEY 未配置")
+
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
         
         # Zep客户端用于检索丰富上下文
         self.zep_api_key = zep_api_key or Config.ZEP_API_KEY
         self.zep_client = None
         self.graph_id = graph_id
         
-        if self.zep_api_key:
+        if self.zep_api_key and entity_contexts is None:
             try:
                 self.zep_client = get_zep_client(self.zep_api_key)
             except Exception as e:
@@ -315,16 +324,17 @@ class OasisProfileGenerator:
                 entity_attributes=entity.attributes
             )
         
+        native = getattr(self, 'llm_client', None) is not None
         return OasisAgentProfile(
             user_id=user_id,
             user_name=user_name,
             name=name,
             bio=profile_data.get("bio", f"{entity_type}: {name}"),
             persona=profile_data.get("persona", entity.summary or f"A {entity_type} named {name}."),
-            karma=profile_data.get("karma", random.randint(500, 5000)),
-            friend_count=profile_data.get("friend_count", random.randint(50, 500)),
-            follower_count=profile_data.get("follower_count", random.randint(100, 1000)),
-            statuses_count=profile_data.get("statuses_count", random.randint(100, 2000)),
+            karma=profile_data.get("karma", 1000 if native else random.randint(500, 5000)),
+            friend_count=profile_data.get("friend_count", 100 if native else random.randint(50, 500)),
+            follower_count=profile_data.get("follower_count", 150 if native else random.randint(100, 1000)),
+            statuses_count=profile_data.get("statuses_count", 500 if native else random.randint(100, 2000)),
             age=profile_data.get("age"),
             gender=profile_data.get("gender"),
             mbti=profile_data.get("mbti"),
@@ -463,6 +473,9 @@ class OasisProfileGenerator:
         2. 关联节点的详细信息
         3. Zep混合检索到的丰富信息
         """
+        if getattr(self, 'entity_contexts', None) is not None:
+            return self.entity_contexts[entity.uuid]
+
         context_parts = []
         
         # 1. 添加实体属性信息
@@ -529,9 +542,22 @@ class OasisProfileGenerator:
         
         return "\n\n".join(context_parts)
     
-    def _is_individual_entity(self, entity_type: str) -> bool:
-        """判断是否是个人类型实体"""
-        return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
+    def _is_individual_entity(
+        self, entity_type: str, attributes: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Keep known type semantics; recognize person names on custom types."""
+        if self._is_group_entity(entity_type):
+            return False
+        if entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES:
+            return True
+        # Generated ontologies use custom role labels with full_name for people
+        # and org_name for organizations. Do not infer a person from a role
+        # label alone, a malformed name, or conflicting organization metadata.
+        if not isinstance(attributes, dict):
+            return False
+        full_name = attributes.get("full_name")
+        return (isinstance(full_name, str) and bool(full_name.strip())
+                and attributes.get("org_name") in (None, ""))
     
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
@@ -553,7 +579,7 @@ class OasisProfileGenerator:
         - 群体/机构实体：生成代表性账号设定
         """
         
-        is_individual = self._is_individual_entity(entity_type)
+        is_individual = self._is_individual_entity(entity_type, entity_attributes)
         
         if is_individual:
             prompt = self._build_individual_persona_prompt(
@@ -563,6 +589,14 @@ class OasisProfileGenerator:
             prompt = self._build_group_persona_prompt(
                 entity_name, entity_type, entity_summary, entity_attributes, context
             )
+
+        # Native generation owns its review, retries and validation. Do not
+        # catch a pending review or native failure and invent a fallback persona.
+        if getattr(self, 'llm_client', None) is not None:
+            return self.llm_client.chat_json(purpose='persona', messages=[
+                {"role": "system", "content": self._get_system_prompt(is_individual)},
+                {"role": "user", "content": prompt},
+            ])
 
         # 尝试多次生成，直到成功或达到最大重试次数
         max_attempts = 3

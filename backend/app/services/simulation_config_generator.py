@@ -227,19 +227,26 @@ class SimulationConfigGenerator:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
+        llm_client=None,
     ):
+        self.llm_client = llm_client
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model_name = model_name or Config.LLM_MODEL_NAME
         
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY 未配置")
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        self.client = None
+        if llm_client is not None:
+            self.model_name = llm_client.model
+            self.base_url = None
+        else:
+            if not self.api_key:
+                raise ValueError("LLM_API_KEY 未配置")
+
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
     
     def generate_config(
         self,
@@ -303,6 +310,10 @@ class SimulationConfigGenerator:
         # ========== 步骤2: 生成事件配置 ==========
         report_progress(2, t('progress.generatingEventConfig'))
         event_config_result = self._generate_event_config(context, simulation_requirement, entities)
+        if self.llm_client is not None:
+            types = {entity.get_entity_type() or 'Unknown' for entity in entities}
+            if any(post['poster_type'] not in types for post in event_config_result['initial_posts']):
+                raise ValueError('Initial post references an unknown entity type')
         event_config = self._parse_event_config(event_config_result)
         reasoning_parts.append(f"{t('progress.eventConfigLabel')}: {event_config_result.get('reasoning', t('common.success'))}")
         
@@ -432,10 +443,16 @@ class SimulationConfigGenerator:
         
         return "\n".join(lines)
     
-    def _call_llm_with_retry(self, prompt: str, system_prompt: str) -> Dict[str, Any]:
+    def _call_llm_with_retry(self, prompt: str, system_prompt: str, purpose: str = 'time') -> Dict[str, Any]:
         """带重试的LLM调用，包含JSON修复逻辑"""
         import re
-        
+
+        if getattr(self, 'llm_client', None) is not None:
+            return self.llm_client.chat_json(purpose=purpose, messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ])
+
         max_attempts = 3
         last_error = None
         
@@ -593,6 +610,8 @@ class SimulationConfigGenerator:
         try:
             return self._call_llm_with_retry(prompt, system_prompt)
         except Exception as e:
+            if getattr(self, "llm_client", None) is not None:
+                raise
             logger.warning(f"时间配置LLM生成失败: {e}, 使用默认配置")
             return self._get_default_time_config(num_entities)
     
@@ -615,6 +634,9 @@ class SimulationConfigGenerator:
         # 获取原始值
         agents_per_hour_min = result.get("agents_per_hour_min", max(1, num_entities // 15))
         agents_per_hour_max = result.get("agents_per_hour_max", max(5, num_entities // 5))
+        native = getattr(self, 'llm_client', None) is not None
+        if native and not 1 <= agents_per_hour_min <= agents_per_hour_max <= num_entities:
+            raise ValueError('Native activity range exceeds the frozen agent count')
         
         # 验证并修正：确保不超过总agent数
         if agents_per_hour_min > num_entities:
@@ -626,7 +648,7 @@ class SimulationConfigGenerator:
             agents_per_hour_max = max(agents_per_hour_min + 1, num_entities // 2)
         
         # 确保 min < max
-        if agents_per_hour_min >= agents_per_hour_max:
+        if not native and agents_per_hour_min >= agents_per_hour_max:
             agents_per_hour_min = max(1, agents_per_hour_max // 2)
             logger.warning(f"agents_per_hour_min >= max，已修正为 {agents_per_hour_min}")
         
@@ -654,7 +676,7 @@ class SimulationConfigGenerator:
         """生成事件配置"""
         
         # 获取可用的实体类型列表，供 LLM 参考
-        entity_types_available = list(set(
+        entity_types_available = sorted(set(
             e.get_entity_type() or "Unknown" for e in entities
         ))
         
@@ -708,8 +730,10 @@ class SimulationConfigGenerator:
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'poster_type' field value MUST be in English PascalCase exactly matching the available entity types. Only 'content', 'narrative_direction', 'hot_topics' and 'reasoning' fields should use the specified language."
 
         try:
-            return self._call_llm_with_retry(prompt, system_prompt)
+            return self._call_llm_with_retry(prompt, system_prompt, purpose='events')
         except Exception as e:
+            if getattr(self, "llm_client", None) is not None:
+                raise
             logger.warning(f"事件配置LLM生成失败: {e}, 使用默认配置")
             return {
                 "hot_topics": [],
@@ -872,9 +896,15 @@ class SimulationConfigGenerator:
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'stance' field value MUST be one of the English strings: 'supportive', 'opposing', 'neutral', 'observer'. All JSON field names and numeric values must remain unchanged. Only natural language text fields should use the specified language."
 
         try:
-            result = self._call_llm_with_retry(prompt, system_prompt)
+            result = self._call_llm_with_retry(prompt, system_prompt, purpose='agents')
+            if getattr(self, 'llm_client', None) is not None:
+                ids = [cfg['agent_id'] for cfg in result['agent_configs']]
+                if sorted(ids) != list(range(start_idx, start_idx + len(entities))):
+                    raise ValueError('Native settings must cover each requested agent exactly once')
             llm_configs = {cfg["agent_id"]: cfg for cfg in result.get("agent_configs", [])}
         except Exception as e:
+            if getattr(self, "llm_client", None) is not None:
+                raise
             logger.warning(f"Agent配置批次LLM生成失败: {e}, 使用规则生成")
             llm_configs = {}
         
