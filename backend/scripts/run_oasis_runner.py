@@ -17,23 +17,48 @@ with contextlib.redirect_stdout(sys.stderr):
     from app.agent_runners.exchange import FileExchange, ReviewRequired, read_json
     from app.agent_runners.oasis_model import ReviewedActionModel
     from app.agent_runners.oasis_smoke import run_one_agent
+    from app.agent_runners.oasis_group import prepare_group, apply_group
+    from app.agent_runners.oasis_followup import prepare_followup, apply_followup
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    prepare = commands.add_parser("prepare")
-    prepare.add_argument("--directory", type=Path, required=True)
-    prepare.add_argument("--identity", required=True)
-    prepare.add_argument("--model", required=True)
-    prepare.add_argument("--effort", required=True)
+    for name in ("prepare", "prepare-group", "prepare-followup"):
+        prepare = commands.add_parser(name)
+        prepare.add_argument("--directory", type=Path, required=True)
+        prepare.add_argument("--identity", required=True)
+        prepare.add_argument("--model", required=True)
+        prepare.add_argument("--effort", required=True)
+        if name == "prepare-followup":
+            prepare.add_argument("--previous-result", type=Path, required=True)
+            prepare.add_argument("--previous-sha256", required=True)
     apply = commands.add_parser("apply")
     apply.add_argument("--directory", type=Path, required=True)
     apply.add_argument("--response", type=Path, required=True)
+    for name in ("apply-group", "apply-followup"):
+        group = commands.add_parser(name)
+        group.add_argument("--directory", type=Path, required=True)
+        group.add_argument("--responses", type=Path, required=True)
     args = parser.parse_args()
     directory = args.directory.resolve()
     try:
-        if args.command == "prepare":
+        if args.command == "prepare-followup":
+            with contextlib.redirect_stdout(sys.stderr):
+                result = asyncio.run(prepare_followup(directory,
+                    dict(identity=args.identity, model=args.model, effort=args.effort),
+                    args.previous_result, args.previous_sha256))
+        elif args.command == "apply-followup":
+            with contextlib.redirect_stdout(sys.stderr):
+                result = asyncio.run(apply_followup(directory, args.responses))
+        elif args.command == "prepare-group":
+            with contextlib.redirect_stdout(sys.stderr):
+                result = asyncio.run(prepare_group(directory,
+                    dict(identity=args.identity, model=args.model, effort=args.effort)))
+        elif args.command == "apply-group":
+            with contextlib.redirect_stdout(sys.stderr):
+                result = asyncio.run(apply_group(directory, args.responses))
+        elif args.command == "prepare":
             settings = dict(identity=args.identity, model=args.model, effort=args.effort)
             model = ReviewedActionModel(FileExchange(directory), **settings)
             directory.mkdir(parents=True, exist_ok=False)
@@ -56,6 +81,7 @@ def main():
                 result = asyncio.run(run_one_agent(model, directory / "apply.db"))
             result.update(status="applied", request_sha256=request["request_sha256"],
                           database=str(directory / "apply.db"))
+        if result["status"] == "applied":
             with (directory / "result.json").open("x") as stream:
                 json.dump(result, stream, indent=2)
                 stream.write("\n")

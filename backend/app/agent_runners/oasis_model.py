@@ -36,10 +36,18 @@ def validate_decision(response, digest):
     args = call["arguments"]
     if not isinstance(args, dict) or set(args) != {"content"}:
         raise ValueError("create_post requires only content")
-    content = args["content"]
+    validate_content(args["content"])
+    return call
+
+
+def validate_content(content):
+    """Require a bounded post that the platform can persist as UTF-8."""
     if not isinstance(content, str) or not content.strip() or len(content) > 280:
         raise ValueError("Post content must contain 1-280 characters")
-    return call
+    try:
+        content.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise ValueError("Post content must be valid UTF-8 text") from error
 
 
 class ByteCounter(BaseTokenCounter):

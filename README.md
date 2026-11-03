@@ -96,8 +96,9 @@ Click the image to watch MiroFish's deep prediction of the lost ending based on 
 ### RUDI fork: reviewed native-agent experiment
 
 This fork includes a bounded [Codex/OASIS integration experiment](docs/agent-runners.md):
-capture one real OASIS character request, obtain a reviewed native Codex response,
-and apply it through CAMEL into a fresh simulation database. It does not yet replace
+capture one or three real OASIS character requests, obtain separately reviewed
+native Codex responses, and apply them through CAMEL into a fresh shared simulation
+database. It does not yet replace
 the full application's model API or Zep dependencies.
 
 ### Option 1: Source Code Deployment (Recommended)
