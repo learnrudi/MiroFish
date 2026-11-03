@@ -7,22 +7,22 @@ from .oasis_smoke import GROUP_PERSONAS, run_group
 NAMES = tuple(name.lower() for name, _ in GROUP_PERSONAS)
 
 
-async def prepare_group(directory, settings):
+async def prepare_group(directory, settings, *, prior_posts=None):
     directory.mkdir(parents=True, exist_ok=False)
     models = []
     for name in NAMES:
         (directory / name).mkdir()
         models.append(ReviewedActionModel(FileExchange(directory / name), **settings))
-    await _capture_requests(models, directory / "prepare.db")
+    await _capture_requests(models, directory / "prepare.db", prior_posts=prior_posts)
     return {"status": "awaiting_review", "requests": [
         {"user_name": name, "request": str(directory / name / "request.json"),
          "request_sha256": read_json(directory / name / "request.json", limit=131072)["request_sha256"]}
         for name in NAMES]}
 
 
-async def _capture_requests(models, database):
+async def _capture_requests(models, database, *, prior_posts=None):
     try:
-        await run_group(models, database)
+        await run_group(models, database, prior_posts=prior_posts)
     except ReviewRequired:
         # OASIS swallows exceptions. All three must have reached capture, and
         # none may hide a different failure behind the first missing response.
@@ -49,7 +49,7 @@ def _snapshot_exchange(request, response=None):
     return exchange
 
 
-async def apply_group(directory, responses):
+async def apply_group(directory, responses, *, prior_posts=None):
     models = []
     verification_models = []
     digests = {}
@@ -64,7 +64,7 @@ async def apply_group(directory, responses):
         digests[name] = request["request_sha256"]
     # Verify every regenerated context before allowing any agent to post. This
     # avoids a partial application when a later agent's packet has drifted.
-    await _capture_requests(verification_models, directory / "verify.db")
-    result = await run_group(models, directory / "apply.db")
+    await _capture_requests(verification_models, directory / "verify.db", prior_posts=prior_posts)
+    result = await run_group(models, directory / "apply.db", prior_posts=prior_posts)
     result.update(status="applied", request_sha256=digests, database=str(directory / "apply.db"))
     return result

@@ -1,6 +1,7 @@
 """File exchange for an explicitly reviewed native runner decision."""
 
 import json
+import hashlib
 import os
 import stat
 from pathlib import Path
@@ -15,7 +16,7 @@ def canonical_json(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
 
 
-def read_json(path, limit=16384):
+def read_json(path, limit=16384, *, expected_sha256=None):
     """Read bounded regular JSON files; never follow the final symlink."""
     path = Path(path)
     if path.is_symlink():
@@ -27,6 +28,8 @@ def read_json(path, limit=16384):
         raw = stream.read(limit + 1)
     if len(raw) > limit:
         raise ValueError("Exchange file exceeds size limit")
+    if expected_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("Input file does not match the expected SHA-256")
 
     def unique(pairs):
         result = {}

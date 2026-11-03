@@ -177,6 +177,57 @@ Backend validation therefore runs on the Apple Silicon workstation. Native
 Codex tasks can still run on Admin, with verified response files brought back
 for local OASIS application. No dependencies were changed to bypass this limit.
 
+## Reviewed second round
+
+`prepare-followup` accepts the verified first-round `result.json` and its exact
+SHA-256. It validates three attributed posts, creates a fresh world, and replays
+those posts through OASIS `ManualAction` calls. It restores each character's own
+post as a CAMEL assistant memory message. The other posts arrive through the real
+OASIS feed, with a user-ID/name map in the persona context. No new inference is
+used to reconstruct round one, and the original result/database remain untouched.
+
+```sh
+uv run --frozen python scripts/run_oasis_runner.py prepare-followup \
+  --directory /tmp/mirofish-round2 \
+  --previous-result /path/to/verified-first-round/result.json \
+  --previous-sha256 THE_EXACT_FILE_SHA256 \
+  --identity codex-hoff --model gpt-6.1-sol --effort low
+```
+
+Review three new native tasks containing these full packets, including memory
+and feed. Each task writes one follow-up response; the character can maintain or
+revise its position, with no instruction to agree. After verifying native receipts
+and response hashes, apply the three separately named response files:
+
+```sh
+uv run --frozen python scripts/run_oasis_runner.py apply-followup \
+  --directory /tmp/mirofish-round2 --responses /path/to/verified-round2-responses
+```
+
+Capture and preflight databases contain only the three replayed posts. Successful
+application requires six posts and six `create_post` traces, two per character.
+The resulting `posts` list is in creation order: the three earlier posts, then
+the three follow-ups. Changed history or a mismatched response fails before new
+posts are applied; unexpected runtime failures may retain partial evidence.
+
+Reconstruction restores the earlier post text, not a full native session or all
+CAMEL tool history. Synthetic timestamps use a fixed clock so capture and apply
+receive identical feeds; original wall-clock timestamps are not retained. All
+characters observe the same round-one feed, not earlier decisions from round two.
+These are follow-up `create_post` actions, not threaded `create_comment` actions.
+The snapshot/hash proves which input was used, not who originally generated it;
+the operator must verify the first-round receipts and result before preparation.
+Only the first-round three-post result is accepted: this is not a general loop.
+
+Assess the live outputs for references to other posts, consistency with budgets
+and roles, and continuity with the earlier position. Technical success does not
+require agreement or prove that another agent caused a change of opinion.
+
+Verification: 158 backend tests passed, including seven new follow-up cases.
+An independent reviewer reran all 29 runner/group/follow-up cases and returned
+Standards/Spec/Proof pass with no findings. Live second-round responses remain
+pending execution of the separately reviewed native tasks.
+
 ## Verification and limits
 
 ```sh
@@ -205,7 +256,7 @@ first reproduced an unwanted post, then passed with rejection and zero posts.
 The reviewer confirmed the correction; the full backend suite passed 143 tests.
 
 This is not yet the main web application's inference backend. Persona/config
-generation, reports, interviews, multiple rounds, other tools, streaming, other
+generation, reports, interviews, unbounded round loops, other tools, streaming, other
 providers, automatic job admission and parallel action execution are outside this slice.
 The byte-based context counter is a conservative fixture budget, not measured
 token usage or a production tokenizer. The full app retains its original model
