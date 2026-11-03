@@ -16,8 +16,13 @@ from .config import Config
 from .utils.logger import setup_logger, get_logger
 
 
-def create_app(config_class=Config):
+def create_app(config_class=Config, *, native_coordinator=None, native_options=None):
     """Flask应用工厂函数"""
+    if native_coordinator is not None:
+        # Explicit local-only mode: no model API/Zep configuration or legacy
+        # simulation routes. Its operator endpoints have their own boundaries.
+        from .agent_runners.native_http import create_native_app
+        return create_native_app(native_coordinator, native_options)
     app = Flask(__name__)
     app.config.from_object(config_class)
     
