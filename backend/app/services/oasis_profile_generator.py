@@ -542,9 +542,22 @@ class OasisProfileGenerator:
         
         return "\n\n".join(context_parts)
     
-    def _is_individual_entity(self, entity_type: str) -> bool:
-        """判断是否是个人类型实体"""
-        return entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES
+    def _is_individual_entity(
+        self, entity_type: str, attributes: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Keep known type semantics; recognize person names on custom types."""
+        if self._is_group_entity(entity_type):
+            return False
+        if entity_type.lower() in self.INDIVIDUAL_ENTITY_TYPES:
+            return True
+        # Generated ontologies use custom role labels with full_name for people
+        # and org_name for organizations. Do not infer a person from a role
+        # label alone, a malformed name, or conflicting organization metadata.
+        if not isinstance(attributes, dict):
+            return False
+        full_name = attributes.get("full_name")
+        return (isinstance(full_name, str) and bool(full_name.strip())
+                and attributes.get("org_name") in (None, ""))
     
     def _is_group_entity(self, entity_type: str) -> bool:
         """判断是否是群体/机构类型实体"""
@@ -566,7 +579,7 @@ class OasisProfileGenerator:
         - 群体/机构实体：生成代表性账号设定
         """
         
-        is_individual = self._is_individual_entity(entity_type)
+        is_individual = self._is_individual_entity(entity_type, entity_attributes)
         
         if is_individual:
             prompt = self._build_individual_persona_prompt(

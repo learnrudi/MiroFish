@@ -50,3 +50,42 @@ def test_injected_generators_need_no_model_api_key(monkeypatch):
     config = SimulationConfigGenerator(llm_client=client)
     assert persona._build_entity_context(EntityNode('alice','Alice',['Person'],'Customer',{})) == 'Frozen graph facts'
     assert config.model_name == 'gpt-6.1-sol'
+
+
+def test_custom_person_type_uses_individual_persona_prompt():
+    generate = Mock(return_value={'bio': 'Independent reviewer', 'persona': 'Fictional Casey.'})
+    client = SimpleNamespace(chat_json=generate, model='gpt-6.1-sol')
+    generator = OasisProfileGenerator(llm_client=client, entity_contexts={'casey': 'Frozen facts'})
+    entity = EntityNode('casey', 'Casey', ['IndependentReviewer'],
+                        'An independent reviewer.', {'full_name': 'Casey'})
+
+    generator.generate_profile_from_entity(entity, 0)
+
+    prompt = generate.call_args.kwargs['messages'][1]['content']
+    assert '个人记忆' in prompt
+    assert '机构基本信息' not in prompt
+
+
+@pytest.mark.parametrize('entity_type,attributes,individual', [
+    ('Customer', {'full_name': 'Alice'}, True),
+    ('ProductManager', {'full_name': 'Bob'}, True),
+    ('ServiceProvider', {'org_name': 'NotebookCo'}, False),
+    ('Organization', {'full_name': 'NotebookCo'}, False),
+    ('Person', {}, True),
+    ('UnknownRole', {'full_name': '   '}, False),
+    ('UnknownRole', {'full_name': ['Casey']}, False),
+    ('UnknownRole', {'full_name': 'Casey', 'org_name': 'Review Team'}, False),
+    ('UnknownRole', {'full_name': 'Casey', 'org_name': {}}, False),
+    ('UnknownRole', None, False),
+])
+def test_persona_prompt_preserves_type_and_identity_boundaries(entity_type, attributes, individual):
+    generate = Mock(return_value={'bio': 'Test account', 'persona': 'Fictional test account.'})
+    client = SimpleNamespace(chat_json=generate, model='gpt-6.1-sol')
+    generator = OasisProfileGenerator(llm_client=client, entity_contexts={'actor': 'Frozen facts'})
+    entity = EntityNode('actor', 'Actor', [entity_type], 'Test actor', attributes)
+
+    generator.generate_profile_from_entity(entity, 0)
+
+    prompt = generate.call_args.kwargs['messages'][1]['content']
+    assert ('个人记忆' in prompt) is individual
+    assert ('机构基本信息' in prompt) is not individual
