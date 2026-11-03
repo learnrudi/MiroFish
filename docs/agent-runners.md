@@ -146,6 +146,28 @@ after other agents had posted. Strict UTF-8 content validation now rejects it
 during preflight; the reviewer confirmed the regression and approved this bounded
 implementation. Existing upstream igraph/SQLite deprecation warnings remain.
 
+### Live three-agent result
+
+On 2026-11-02 (America/New_York), all three reviewed native jobs completed on their
+first attempt through `codex-hoff`, `gpt-6.1-sol`, low effort, with observed ChatGPT
+authentication and three distinct native sessions. Completion and launch receipts,
+reviewed task hashes, identity/model/effort, and output hashes were verified before
+importing the responses. OASIS then regenerated the exact three requests and stored
+three posts and three `create_post` traces, correctly attributed to Alice, Bob,
+and Casey. A direct SQLite check also matched each post to its native response.
+
+| Agent | Observed reaction | Native job duration |
+| --- | --- | --- |
+| Alice | The new $30 price exceeds her $25 budget; plans to find a cheaper option. | 30.32 seconds |
+| Bob | Daily work use and a $50 budget favor staying, while comparing alternatives. | 36.45 seconds |
+| Casey | Wants clarity on future pricing and import/export effort before choosing for a team. | 38.78 seconds |
+
+All posts met the 280-character limit. Durations include native runner/file
+overhead, exclude queue waiting, and are not a throughput benchmark. Native jobs
+and OASIS actions were serialized. This proves separate persona responses and
+shared-world application for one round; the agents have not yet read or replied
+to each other's posts. It does not establish real-world predictive accuracy.
+
 ### Execution hosts
 
 The accepted single-agent source was cloned to Admin through Git at merge
