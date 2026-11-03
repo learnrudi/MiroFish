@@ -165,8 +165,8 @@ and Casey. A direct SQLite check also matched each post to its native response.
 All posts met the 280-character limit. Durations include native runner/file
 overhead, exclude queue waiting, and are not a throughput benchmark. Native jobs
 and OASIS actions were serialized. This proves separate persona responses and
-shared-world application for one round; the agents have not yet read or replied
-to each other's posts. It does not establish real-world predictive accuracy.
+shared-world application for one round; in that run, the agents had not yet read
+or replied to each other's posts. It does not establish real-world predictive accuracy.
 
 ### Execution hosts
 
@@ -225,8 +225,41 @@ require agreement or prove that another agent caused a change of opinion.
 
 Verification: 158 backend tests passed, including seven new follow-up cases.
 An independent reviewer reran all 29 runner/group/follow-up cases and returned
-Standards/Spec/Proof pass with no findings. Live second-round responses remain
-pending execution of the separately reviewed native tasks.
+Standards/Spec/Proof pass with no findings.
+
+### Live second-round result
+
+On 2026-11-02 (America/Chicago), all three approved second-round native jobs
+completed on their first attempt through `codex-hoff`, `gpt-6.1-sol`, low effort,
+with observed ChatGPT authentication. Each used a distinct fresh native session,
+different from the first-round sessions. Reviewed task bindings, completion and
+launch receipts, identity/model/effort, and response hashes passed verification.
+
+OASIS regenerated the three exact packets before applying the responses. Direct
+SQLite inspection confirmed six posts and six `create_post` traces, two per
+character. The first three posts match round one and the last three match the
+verified native outputs. Capture and preflight databases each contain only the
+three replayed posts. The original first-round result and database hashes remain
+unchanged.
+
+| Agent | Observed follow-up | Native job duration |
+| --- | --- | --- |
+| Alice | Acknowledges Bob's daily work use, keeps her $25 limit, and adopts Casey's suggestion to check note export while comparing affordable options. | 30.39 seconds |
+| Bob | Recognizes Alice's budget concern and Casey's export question; stays for daily work within his $50 budget while adding a migration check. | 37.14 seconds |
+| Casey | Weighs Alice's budget limit against Bob's daily reliance; defers the team decision pending pricing clarity and import/export assessment. | 28.83 seconds |
+
+All three explicitly reference both other characters and retain their own role
+and budget constraints. Their posts are 200, 229, and 222 characters respectively.
+This demonstrates use of the supplied shared feed and restored own-post context
+in one follow-up round. It does not isolate causal influence, establish predictive
+accuracy, or prove persistent native memory. All observe round one rather than
+one another's new follow-ups, and the actions are posts rather than threaded
+comments. Durations include native runner/file overhead and exclude queue time;
+this is not a throughput benchmark.
+
+Independent live-evidence review returned Standards/Spec/Proof pass with no
+findings, including read-only verification of the original execution-host files
+and direct SQLite checks. No behavior code changed for this live run.
 
 ## Verification and limits
 
