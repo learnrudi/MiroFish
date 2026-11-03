@@ -16,7 +16,7 @@ from .config import Config
 from .utils.logger import setup_logger, get_logger
 
 
-def create_app(config_class=Config, *, native_coordinator=None, native_options=None):
+def create_app(config_class=Config, *, native_coordinator=None, native_options=None, setup_coordinator=None):
     """Flask应用工厂函数"""
     if native_coordinator is not None:
         # Explicit local-only mode: no model API/Zep configuration or legacy
@@ -45,7 +45,11 @@ def create_app(config_class=Config, *, native_coordinator=None, native_options=N
         logger.info("=" * 50)
     
     # 启用CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    if setup_coordinator is None:
+        CORS(app, resources={r"/api/*": {"origins": "*"}})
+    else:
+        from .agent_runners.setup_http import install_setup
+        install_setup(app, setup_coordinator, native_options)
     
     # 注册模拟进程清理函数（确保服务器关闭时终止所有模拟进程）
     from .services.simulation_runner import SimulationRunner
@@ -58,7 +62,7 @@ def create_app(config_class=Config, *, native_coordinator=None, native_options=N
     def log_request():
         logger = get_logger('mirofish.request')
         logger.debug(f"请求: {request.method} {request.path}")
-        if request.content_type and 'json' in request.content_type:
+        if setup_coordinator is None and request.content_type and 'json' in request.content_type:
             logger.debug(f"请求体: {request.get_json(silent=True)}")
     
     @app.after_request
