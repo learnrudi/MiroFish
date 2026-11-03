@@ -299,8 +299,10 @@ generated packets and Compute controls stay outside it.
 ## Viewing recorded runs
 
 The frontend route `/runner-results` displays the completed one- or two-round
-experiment. It shows the original post text by round and character, with round
-and agent filters. It is a read-only replay: opening the page does not start
+experiment. It shows the original posts in a chronological community feed,
+with author names, round separators, and round/agent filters. Posts remain
+standalone messages; no threaded replies or reactions are implied. It is a
+read-only replay: opening the page does not start
 OASIS, admit a native job, contact the backend/model APIs, or generate a report.
 The existing `/simulation/:id/start` page still starts an API-backed simulation
 on mount and is not a viewer for this native-runner experiment.
