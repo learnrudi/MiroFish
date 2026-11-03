@@ -295,3 +295,61 @@ The byte-based context counter is a conservative fixture budget, not measured
 token usage or a production tokenizer. The full app retains its original model
 API and Zep requirements. Source stays in Git; account profiles, keys, databases,
 generated packets and Compute controls stay outside it.
+
+## Viewing recorded runs
+
+The frontend route `/runner-results` displays the completed one- or two-round
+experiment. It shows the original post text by round and character, with round
+and agent filters. It is a read-only replay: opening the page does not start
+OASIS, admit a native job, contact the backend/model APIs, or generate a report.
+The existing `/simulation/:id/start` page still starts an API-backed simulation
+on mount and is not a viewer for this native-runner experiment.
+
+Use **Open run file** to read a local UTF-8 JSON bundle in the browser. For a
+local demo, an operator can place a bundle at
+`frontend/public/runner-results/latest.json`; the page loads that path initially.
+This directory is ignored by Git. Files placed in `public` are served by Vite
+and copied into production builds, so keep private run files outside it and use
+the file picker instead. Native receipts, account descriptors, machine paths,
+credentials and databases do not belong in a display bundle.
+
+Bundle fields:
+
+| Field | Meaning |
+| --- | --- |
+| `schema_version` | Integer `1`. |
+| `title`, `scenario` | Display text, bounded to 120 and 1,000 Unicode code points. |
+| `recorded_at` | Completion timestamp parseable by the browser. |
+| `runner` | Display metadata: `identity`, `model`, `effort`. |
+| `source_sha256` | Lowercase SHA-256 of the original verified result file. |
+| `posts` | The result's original `user_name`/`content` objects, in creation order. |
+
+Only three or six posts are accepted, ordered Alice/Bob/Casey in each round.
+Content must be nonblank, valid Unicode and at most 280 code points. Input is
+bounded to 64 KiB while streaming, regardless of HTTP content-length headers;
+both file and network inputs use fatal UTF-8 decoding. Unknown fields are
+excluded from the displayed record. This
+schema check is not receipt verification: the operator must verify native
+provenance before exporting, and the UI labels the data as an imported record.
+
+From `frontend`, run `npm run test:runner` and `npm run build` to verify the view's
+parser and production compilation. Browser checks cover all six posts, round
+filtering, agent filtering and the original source digest. No backend or model
+credentials are needed for this route.
+
+## Next integration test
+
+Keep three agents and two rounds, then exercise the actual UI-to-runner path:
+prepare a bounded run, review/admit its native work, poll status, verify outputs,
+apply actions and show the resulting timeline. Test a timeout or failed job and
+a repeated start request as well as success; no duplicate jobs/posts or hidden
+model-API fallback should be allowed. This requires a backend job coordinator,
+not just changing the model name or API URL.
+
+The remaining model boundaries are separate: `LLMClient` serves ontology and
+report/tool reasoning; profile and simulation configuration generators instantiate
+OpenAI clients directly; the normal simulation scripts construct CAMEL model
+backends; reports and post-simulation interviews need their own native-runner
+integration. Zep Cloud graph storage/ingestion is another service and is not
+replaced by selecting codex-hoff. The first full-app path should retain that
+graph contract while replacing model calls one boundary at a time.

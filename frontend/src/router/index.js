@@ -8,6 +8,11 @@ import InteractionView from '../views/InteractionView.vue'
 
 const routes = [
   {
+    path: '/runner-results',
+    name: 'RunnerResults',
+    component: () => import('../views/RunnerResultsView.vue')
+  },
+  {
     path: '/',
     name: 'Home',
     component: Home
